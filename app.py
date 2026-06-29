@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ import streamlit_authenticator as stauth
 
 
 REQUIRED_SECRET_KEYS = ["google_sheet_url", "google_form_url", "cookie_key"]
+LOCAL_EXPENSES_PATTERN = "expenses_*.csv"
 
 
 st.set_page_config(
@@ -148,12 +150,7 @@ def get_csv_url() -> str:
     return f"{csv_url}&timestamp={int(time.time())}"
 
 
-def load_expenses() -> pd.DataFrame:
-    try:
-        data = pd.read_csv(get_csv_url())
-    except Exception:
-        data = pd.DataFrame(columns=["username", "Khath", "Amount"])
-
+def normalize_expenses(data: pd.DataFrame, fallback_username: str = "") -> pd.DataFrame:
     rename_map = {
         "User": "username",
         "Username": "username",
@@ -167,13 +164,57 @@ def load_expenses() -> pd.DataFrame:
 
     for column in ["username", "Khath", "Amount"]:
         if column not in data.columns:
-            data[column] = np.nan
+            data[column] = fallback_username if column == "username" else np.nan
 
     data = data[["username", "Khath", "Amount"]].copy()
-    data["username"] = data["username"].fillna("").astype(str).str.strip()
+    data["username"] = data["username"].fillna(fallback_username).astype(str).str.strip()
     data["Khath"] = data["Khath"].fillna("অন্যান্য").astype(str).str.strip()
     data["Amount"] = pd.to_numeric(data["Amount"], errors="coerce").fillna(0).astype(int)
     return data[data["Amount"] > 0]
+
+
+def load_local_expenses() -> pd.DataFrame:
+    expenses = []
+
+    for path in Path(".").glob(LOCAL_EXPENSES_PATTERN):
+        fallback_username = path.stem.replace("expenses_", "", 1)
+        try:
+            expenses.append(normalize_expenses(pd.read_csv(path), fallback_username))
+        except Exception:
+            continue
+
+    if not expenses:
+        return pd.DataFrame(columns=["username", "Khath", "Amount"])
+    return pd.concat(expenses, ignore_index=True)
+
+
+def load_expenses() -> pd.DataFrame:
+    try:
+        data = normalize_expenses(pd.read_csv(get_csv_url()))
+    except Exception:
+        data = pd.DataFrame(columns=["username", "Khath", "Amount"])
+
+    local_data = load_local_expenses()
+    if data.empty:
+        return local_data
+    if local_data.empty:
+        return data
+    return pd.concat([data, local_data], ignore_index=True)
+
+
+def save_local_expense(username: str, category: str, amount: int) -> None:
+    path = Path(f"expenses_{username}.csv")
+    new_row = pd.DataFrame(
+        [{"username": username, "Khath": category, "Amount": int(amount)}]
+    )
+
+    if path.exists():
+        existing = normalize_expenses(pd.read_csv(path), username)
+        data = pd.concat([existing, new_row], ignore_index=True)
+    else:
+        data = new_row
+
+    data.to_csv(path, index=False, encoding="utf-8")
 
 
 def save_expense(username: str, category: str, amount: int) -> tuple[bool, str]:
@@ -186,11 +227,21 @@ def save_expense(username: str, category: str, amount: int) -> tuple[bool, str]:
     try:
         response = requests.post(GOOGLE_FORM_URL, data=form_data, timeout=15)
     except requests.RequestException as exc:
-        return False, f"ডেটা পাঠাতে সমস্যা হয়েছে: {exc}"
+        save_local_expense(username, category, amount)
+        return (
+            True,
+            "Google-এ পাঠানো যায়নি, তাই খরচটি লোকাল CSV ফাইলে সেভ হয়েছে। "
+            f"কারণ: {exc}",
+        )
 
     if response.status_code in (200, 302):
         return True, "খরচটি সফলভাবে সেভ হয়েছে।"
-    return False, "গুগল ফর্মে ডেটা পাঠানো যায়নি। Entry ID এবং ফর্ম লিংক চেক করুন।"
+    save_local_expense(username, category, amount)
+    return (
+        True,
+        "Google Form সাড়া দেয়নি, তাই খরচটি লোকাল CSV ফাইলে সেভ হয়েছে। "
+        "Entry ID এবং ফর্ম লিংক পরে চেক করুন।",
+    )
 
 
 def format_taka(amount: int | float) -> str:
