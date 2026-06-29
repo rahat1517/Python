@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import requests
 import streamlit as st
 import streamlit_authenticator as stauth
@@ -17,6 +18,11 @@ st.set_page_config(
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="collapsed",
+    menu_items={
+        "Get Help": None,
+        "Report a bug": None,
+        "About": None,
+    },
 )
 
 st.markdown(
@@ -70,6 +76,17 @@ st.markdown(
 
         section[data-testid="stSidebar"] {
             font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", sans-serif;
+        }
+
+        #MainMenu, footer, header {
+            visibility: hidden;
+        }
+
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        [data-testid="manage-app-button"] {
+            display: none;
         }
 
         @media (max-width: 720px) {
@@ -154,6 +171,11 @@ def normalize_expenses(data: pd.DataFrame, fallback_username: str = "") -> pd.Da
     rename_map = {
         "User": "username",
         "Username": "username",
+        "Timestamp": "Date",
+        "timestamp": "Date",
+        "Date": "Date",
+        "date": "Date",
+        "তারিখ": "Date",
         "খাত": "Khath",
         "Category": "Khath",
         "Amount": "Amount",
@@ -162,12 +184,13 @@ def normalize_expenses(data: pd.DataFrame, fallback_username: str = "") -> pd.Da
     }
     data = data.rename(columns=rename_map)
 
-    for column in ["username", "Khath", "Amount"]:
+    for column in ["username", "Date", "Khath", "Amount"]:
         if column not in data.columns:
             data[column] = fallback_username if column == "username" else np.nan
 
-    data = data[["username", "Khath", "Amount"]].copy()
+    data = data[["username", "Date", "Khath", "Amount"]].copy()
     data["username"] = data["username"].fillna(fallback_username).astype(str).str.strip()
+    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
     data["Khath"] = data["Khath"].fillna("অন্যান্য").astype(str).str.strip()
     data["Amount"] = pd.to_numeric(data["Amount"], errors="coerce").fillna(0).astype(int)
     return data[data["Amount"] > 0]
@@ -184,7 +207,7 @@ def load_local_expenses() -> pd.DataFrame:
             continue
 
     if not expenses:
-        return pd.DataFrame(columns=["username", "Khath", "Amount"])
+        return pd.DataFrame(columns=["username", "Date", "Khath", "Amount"])
     return pd.concat(expenses, ignore_index=True)
 
 
@@ -192,7 +215,7 @@ def load_expenses() -> pd.DataFrame:
     try:
         data = normalize_expenses(pd.read_csv(get_csv_url()))
     except Exception:
-        data = pd.DataFrame(columns=["username", "Khath", "Amount"])
+        data = pd.DataFrame(columns=["username", "Date", "Khath", "Amount"])
 
     local_data = load_local_expenses()
     if data.empty:
@@ -205,7 +228,14 @@ def load_expenses() -> pd.DataFrame:
 def save_local_expense(username: str, category: str, amount: int) -> None:
     path = Path(f"expenses_{username}.csv")
     new_row = pd.DataFrame(
-        [{"username": username, "Khath": category, "Amount": int(amount)}]
+        [
+            {
+                "username": username,
+                "Date": pd.Timestamp.now(),
+                "Khath": category,
+                "Amount": int(amount),
+            }
+        ]
     )
 
     if path.exists():
@@ -246,6 +276,85 @@ def save_expense(username: str, category: str, amount: int) -> tuple[bool, str]:
 
 def format_taka(amount: int | float) -> str:
     return f"{int(amount):,} টাকা"
+
+
+def filter_expenses(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    st.subheader("ফিল্টার")
+
+    category_options = sorted(df["Khath"].dropna().unique().tolist())
+    amount_min = int(df["Amount"].min())
+    amount_max = int(df["Amount"].max())
+    dated_df = df.dropna(subset=["Date"])
+
+    filter_col_1, filter_col_2, filter_col_3 = st.columns(3)
+
+    with filter_col_1:
+        selected_categories = st.multiselect(
+            "খাত নির্বাচন করুন",
+            options=category_options,
+            default=category_options,
+        )
+
+    with filter_col_2:
+        if amount_min == amount_max:
+            amount_range = (amount_min, amount_max)
+            st.number_input(
+                "টাকার পরিমাণ",
+                value=amount_min,
+                disabled=True,
+            )
+        else:
+            amount_range = st.slider(
+                "টাকার পরিমাণ",
+                min_value=amount_min,
+                max_value=amount_max,
+                value=(amount_min, amount_max),
+            )
+
+    with filter_col_3:
+        if dated_df.empty:
+            date_range = None
+            include_missing_date = True
+            st.text_input("তারিখ", value="তারিখ পাওয়া যায়নি", disabled=True)
+        else:
+            start_date = dated_df["Date"].min().date()
+            end_date = dated_df["Date"].max().date()
+            date_range = st.date_input(
+                "তারিখ",
+                value=(start_date, end_date),
+                min_value=start_date,
+                max_value=end_date,
+            )
+            include_missing_date = st.checkbox(
+                "তারিখ নেই এমন রেকর্ড দেখান",
+                value=True,
+            )
+
+    filtered_df = df[
+        df["Khath"].isin(selected_categories)
+        & df["Amount"].between(amount_range[0], amount_range[1])
+    ].copy()
+
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        start_date, end_date = date_range
+        missing_date_filter = (
+            filtered_df["Date"].isna()
+            if include_missing_date
+            else pd.Series(False, index=filtered_df.index)
+        )
+        filtered_df = filtered_df[
+            missing_date_filter
+            | (
+                (filtered_df["Date"].dt.date >= start_date)
+                & (filtered_df["Date"].dt.date <= end_date)
+            )
+        ]
+
+    st.caption(f"মোট {len(df)}টি রেকর্ডের মধ্যে {len(filtered_df)}টি দেখানো হচ্ছে")
+    return filtered_df
 
 
 def show_forecast(df: pd.DataFrame, category_df: pd.DataFrame, remaining_budget: int) -> None:
@@ -302,14 +411,16 @@ elif authentication_status:
     st.sidebar.caption("আপনার ব্যক্তিগত খরচের হিসাব")
 
     all_data = load_expenses()
-    df = all_data[all_data["username"] == username].copy()
+    user_df = all_data[all_data["username"] == username].copy()
+
+    st.title("💰 আমার স্মার্ট মানি ম্যানেজার")
+    st.caption(f"লগইন করা ইউজার: {name}")
+
+    df = filter_expenses(user_df)
 
     total_spent = int(df["Amount"].sum()) if not df.empty else 0
     remaining_budget = TOTAL_BUDGET - total_spent
     used_percent = min(100, round((total_spent / TOTAL_BUDGET) * 100))
-
-    st.title("💰 আমার স্মার্ট মানি ম্যানেজার")
-    st.caption(f"লগইন করা ইউজার: {name}")
 
     metric_1, metric_2, metric_3 = st.columns(3)
     metric_1.metric("মোট বাজেট", format_taka(TOTAL_BUDGET))
@@ -341,8 +452,10 @@ elif authentication_status:
 
     st.divider()
 
-    if df.empty:
+    if user_df.empty:
         st.info("এখনো কোনো খরচের রেকর্ড নেই। প্রথম খরচটি যোগ করুন।")
+    elif df.empty:
+        st.info("এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি। ফিল্টার বদলে দেখুন।")
     else:
         st.subheader("খরচের বিশ্লেষণ")
         category_df = (
@@ -355,7 +468,6 @@ elif authentication_status:
             columns={"Khath": "খাত", "Amount": "মোট খরচ"}
         )
 
-        chart_df = table_df.set_index("খাত")
         left_col, right_col = st.columns([1, 1])
 
         with left_col:
@@ -363,14 +475,31 @@ elif authentication_status:
             st.dataframe(table_df, use_container_width=True, hide_index=True)
 
         with right_col:
-            st.write("খাত অনুযায়ী খরচ")
-            st.bar_chart(chart_df, use_container_width=True)
+            st.write("খাত অনুযায়ী পাই চার্ট")
+            fig, ax = plt.subplots(figsize=(5, 5))
+            ax.pie(
+                category_df["Amount"],
+                labels=category_df["Khath"],
+                autopct="%1.1f%%",
+                startangle=90,
+                textprops={"fontsize": 10},
+            )
+            ax.axis("equal")
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
 
         with st.expander("সব রেকর্ড দেখুন"):
-            full_df = df.rename(
-                columns={"username": "ইউজার", "Khath": "খাত", "Amount": "টাকা"}
+            full_df = df.copy()
+            full_df["Date"] = full_df["Date"].dt.strftime("%Y-%m-%d").fillna("তারিখ নেই")
+            full_df = full_df.rename(
+                columns={
+                    "username": "ইউজার",
+                    "Date": "তারিখ",
+                    "Khath": "খাত",
+                    "Amount": "টাকা",
+                }
             )
-            st.dataframe(full_df[["খাত", "টাকা"]], use_container_width=True, hide_index=True)
+            st.dataframe(full_df[["তারিখ", "খাত", "টাকা"]], use_container_width=True, hide_index=True)
 
         st.subheader("স্মার্ট বাজেট ফোরকাস্ট")
         if st.button("ফোরকাস্ট ও পরামর্শ তৈরি করুন"):
