@@ -30,30 +30,163 @@ st.markdown(
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap');
 
+        /* ── Base font ── */
         html, body, [class*="css"], [data-testid="stAppViewContainer"] {
             font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", sans-serif;
         }
 
-        .stApp {
-            background: #f7f8fb;
+        /* ── HIDE ALL STREAMLIT/GITHUB BRANDING & FOOTER ── */
+        #MainMenu,
+        footer,
+        header,
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        [data-testid="manage-app-button"],
+        [data-testid="stAppDeployButton"],
+        .stDeployButton,
+        [class*="viewerBadge"],
+        [class*="styles_viewerBadge"],
+        [class*="githubButton"],
+        [data-testid="baseButton-headerNoPadding"],
+        iframe[title="streamlit_authenticator"],
+        a[href*="streamlit.io"],
+        a[href*="share.streamlit.io"],
+        div[class*="StatusWidget"],
+        div[class*="ReportStatus"],
+        section[data-testid="stSidebarNavItems"] + div {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            overflow: hidden !important;
         }
 
-        .block-container {
-            max-width: 1120px;
-            padding-top: 1.4rem;
-            padding-bottom: 2rem;
+        /* ── Light mode ── */
+        @media (prefers-color-scheme: light) {
+            .stApp { background: #f7f8fb; }
+            [data-testid="stMetric"] { background: #ffffff; border: 1px solid #e6e9f0; }
         }
 
-        h1, h2, h3 {
-            letter-spacing: 0;
+        /* ── Dark mode ── */
+        @media (prefers-color-scheme: dark) {
+            .stApp { background: #0f1117 !important; }
+
+            [data-testid="stMetric"] {
+                background: #1e2130 !important;
+                border: 1px solid #2e3250 !important;
+                color: #e8eaf6 !important;
+            }
+
+            [data-testid="stMetricLabel"] p,
+            [data-testid="stMetricValue"],
+            [data-testid="stMetricDelta"] {
+                color: #e8eaf6 !important;
+            }
+
+            h1, h2, h3, h4, p, label, span, div {
+                color: #e8eaf6;
+            }
+
+            [data-testid="stDataFrame"] { filter: none; }
+
+            .stProgress > div > div {
+                background-color: #3d5afe !important;
+            }
+
+            .stProgress {
+                background-color: #2e3250 !important;
+            }
+
+            [data-testid="stExpander"] {
+                background: #1e2130 !important;
+                border: 1px solid #2e3250 !important;
+            }
+
+            .stButton > button,
+            .stFormSubmitButton > button {
+                background: #3d5afe !important;
+                color: #ffffff !important;
+                border: none !important;
+            }
+
+            .stButton > button:hover,
+            .stFormSubmitButton > button:hover {
+                background: #536dfe !important;
+            }
+
+            [data-testid="stTextInput"] input,
+            [data-testid="stNumberInput"] input {
+                background: #1e2130 !important;
+                color: #e8eaf6 !important;
+                border: 1px solid #3d4265 !important;
+            }
+
+            [data-testid="stForm"] {
+                background: #1e2130 !important;
+                border: 1px solid #2e3250 !important;
+                border-radius: 10px !important;
+                padding: 1rem !important;
+            }
+
+            section[data-testid="stSidebar"] {
+                background: #1a1d2e !important;
+                border-right: 1px solid #2e3250 !important;
+            }
+
+            .stAlert {
+                background: #1e2130 !important;
+                border: 1px solid #3d4265 !important;
+            }
+
+            .stInfo { border-left: 4px solid #3d5afe !important; }
+            .stWarning { border-left: 4px solid #ffa000 !important; }
+            .stSuccess { border-left: 4px solid #00c853 !important; }
+            .stError { border-left: 4px solid #f44336 !important; }
+
+            [data-testid="stMultiSelect"] > div,
+            [data-testid="stSelectbox"] > div {
+                background: #1e2130 !important;
+                color: #e8eaf6 !important;
+                border: 1px solid #3d4265 !important;
+            }
+
+            [data-baseweb="tag"] {
+                background: #3d5afe !important;
+                color: #ffffff !important;
+            }
         }
 
+        /* ── Streamlit also sets data-theme attribute ── */
+        [data-theme="dark"] .stApp { background: #0f1117 !important; }
+
+        [data-theme="dark"] [data-testid="stMetric"] {
+            background: #1e2130 !important;
+            border: 1px solid #2e3250 !important;
+        }
+
+        [data-theme="dark"] .stButton > button,
+        [data-theme="dark"] .stFormSubmitButton > button {
+            background: #3d5afe !important;
+            color: #fff !important;
+            border: none !important;
+        }
+
+        [data-theme="dark"] [data-testid="stForm"] {
+            background: #1e2130 !important;
+            border: 1px solid #2e3250 !important;
+            border-radius: 10px !important;
+            padding: 1rem !important;
+        }
+
+        [data-theme="dark"] section[data-testid="stSidebar"] {
+            background: #1a1d2e !important;
+        }
+
+        /* ── Shared metric style ── */
         [data-testid="stMetric"] {
-            background: #ffffff;
-            border: 1px solid #e6e9f0;
-            border-radius: 8px;
+            border-radius: 10px;
             padding: 1rem;
-            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
 
         [data-testid="stMetricLabel"] p,
@@ -61,37 +194,46 @@ st.markdown(
             font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", sans-serif;
         }
 
+        /* ── Buttons ── */
         .stButton > button,
         .stFormSubmitButton > button {
             width: 100%;
             min-height: 2.8rem;
             border-radius: 8px;
             font-weight: 700;
+            font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", sans-serif;
+            transition: background 0.2s ease, transform 0.1s ease;
         }
 
+        .stButton > button:active,
+        .stFormSubmitButton > button:active {
+            transform: scale(0.98);
+        }
+
+        /* ── DataFrame ── */
         div[data-testid="stDataFrame"] {
             border-radius: 8px;
             overflow: hidden;
         }
 
+        /* ── Sidebar font ── */
         section[data-testid="stSidebar"] {
             font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", sans-serif;
         }
 
-        #MainMenu, footer, header {
-            visibility: hidden;
+        /* ── Layout ── */
+        .block-container {
+            max-width: 1120px;
+            padding-top: 1.4rem;
+            padding-bottom: 2rem;
         }
 
-        [data-testid="stToolbar"],
-        [data-testid="stDecoration"],
-        [data-testid="stStatusWidget"],
-        [data-testid="manage-app-button"] {
-            display: none;
-        }
+        h1, h2, h3 { letter-spacing: 0; }
 
+        /* ── Mobile ── */
         @media (max-width: 720px) {
             .block-container {
-                padding: 0.9rem 0.85rem 1.5rem;
+                padding: 0.9rem 0.85rem 3rem; /* extra bottom padding so content clears any residual bar */
             }
 
             h1 {
@@ -99,19 +241,21 @@ st.markdown(
                 line-height: 1.25;
             }
 
-            h2, h3 {
-                font-size: 1.2rem;
-            }
+            h2, h3 { font-size: 1.2rem; }
 
-            [data-testid="stMetric"] {
-                padding: 0.85rem;
+            [data-testid="stMetric"] { padding: 0.85rem; }
+
+            /* bigger tap targets on mobile */
+            .stButton > button,
+            .stFormSubmitButton > button {
+                min-height: 3.2rem;
+                font-size: 1rem;
             }
         }
     </style>
     """,
     unsafe_allow_html=True,
 )
-
 
 def load_config() -> dict:
     missing_keys = []
