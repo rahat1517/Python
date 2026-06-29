@@ -41,6 +41,9 @@ st.markdown(
         header,
         [data-testid="stToolbar"],
         [data-testid="stDecoration"],
+        [data-testid="stFooter"],
+        [data-testid="stFooterIcon"],
+        [data-testid="stFooterLink"],
         [data-testid="stStatusWidget"],
         [data-testid="manage-app-button"],
         [data-testid="stAppDeployButton"],
@@ -48,10 +51,17 @@ st.markdown(
         [class*="viewerBadge"],
         [class*="styles_viewerBadge"],
         [class*="githubButton"],
+        [class*="streamlit-footer"],
+        [class*="footer"],
         [data-testid="baseButton-headerNoPadding"],
         iframe[title="streamlit_authenticator"],
+        a[href*="github.com/streamlit"],
         a[href*="streamlit.io"],
         a[href*="share.streamlit.io"],
+        button[title*="GitHub"],
+        button[title*="Streamlit"],
+        button[aria-label*="GitHub"],
+        button[aria-label*="Streamlit"],
         div[class*="StatusWidget"],
         div[class*="ReportStatus"],
         section[data-testid="stSidebarNavItems"] + div {
@@ -61,19 +71,35 @@ st.markdown(
             overflow: hidden !important;
         }
 
+        footer:has(a[href*="github.com/streamlit"]),
+        footer:has(a[href*="streamlit.io"]) {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            overflow: hidden !important;
+        }
+
         /* ── Light mode ── */
         @media (prefers-color-scheme: light) {
-            .stApp { background: #f7f8fb; }
-            [data-testid="stMetric"] { background: #ffffff; border: 1px solid #e6e9f0; }
+            .stApp {
+                background:
+                    radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 28rem),
+                    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            }
+            [data-testid="stMetric"] { background: rgba(255,255,255,0.92); border: 1px solid #e2e8f0; }
         }
 
         /* ── Dark mode ── */
         @media (prefers-color-scheme: dark) {
-            .stApp { background: #0f1117 !important; }
+            .stApp {
+                background:
+                    radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 28rem),
+                    linear-gradient(180deg, #0f172a 0%, #111827 100%) !important;
+            }
 
             [data-testid="stMetric"] {
-                background: #1e2130 !important;
-                border: 1px solid #2e3250 !important;
+                background: rgba(15, 23, 42, 0.84) !important;
+                border: 1px solid rgba(148, 163, 184, 0.22) !important;
                 color: #e8eaf6 !important;
             }
 
@@ -89,48 +115,46 @@ st.markdown(
 
             [data-testid="stDataFrame"] { filter: none; }
 
-            .stProgress > div > div {
-                background-color: #3d5afe !important;
-            }
+            .stProgress > div > div { background: linear-gradient(90deg, #14b8a6, #f59e0b) !important; }
 
             .stProgress {
-                background-color: #2e3250 !important;
+                background-color: #273449 !important;
             }
 
             [data-testid="stExpander"] {
-                background: #1e2130 !important;
-                border: 1px solid #2e3250 !important;
+                background: rgba(15, 23, 42, 0.82) !important;
+                border: 1px solid rgba(148, 163, 184, 0.2) !important;
             }
 
             .stButton > button,
             .stFormSubmitButton > button {
-                background: #3d5afe !important;
+                background: linear-gradient(135deg, #0f766e, #15803d) !important;
                 color: #ffffff !important;
                 border: none !important;
             }
 
             .stButton > button:hover,
             .stFormSubmitButton > button:hover {
-                background: #536dfe !important;
+                background: linear-gradient(135deg, #0d9488, #16a34a) !important;
             }
 
             [data-testid="stTextInput"] input,
             [data-testid="stNumberInput"] input {
-                background: #1e2130 !important;
+                background: #111827 !important;
                 color: #e8eaf6 !important;
-                border: 1px solid #3d4265 !important;
+                border: 1px solid rgba(148, 163, 184, 0.28) !important;
             }
 
             [data-testid="stForm"] {
-                background: #1e2130 !important;
-                border: 1px solid #2e3250 !important;
-                border-radius: 10px !important;
-                padding: 1rem !important;
+                background: rgba(15, 23, 42, 0.82) !important;
+                border: 1px solid rgba(148, 163, 184, 0.2) !important;
+                border-radius: 8px !important;
+                padding: 1.1rem !important;
             }
 
             section[data-testid="stSidebar"] {
-                background: #1a1d2e !important;
-                border-right: 1px solid #2e3250 !important;
+                background: #0f172a !important;
+                border-right: 1px solid rgba(148, 163, 184, 0.18) !important;
             }
 
             .stAlert {
@@ -138,7 +162,7 @@ st.markdown(
                 border: 1px solid #3d4265 !important;
             }
 
-            .stInfo { border-left: 4px solid #3d5afe !important; }
+            .stInfo { border-left: 4px solid #14b8a6 !important; }
             .stWarning { border-left: 4px solid #ffa000 !important; }
             .stSuccess { border-left: 4px solid #00c853 !important; }
             .stError { border-left: 4px solid #f44336 !important; }
@@ -151,7 +175,7 @@ st.markdown(
             }
 
             [data-baseweb="tag"] {
-                background: #3d5afe !important;
+                background: #0f766e !important;
                 color: #ffffff !important;
             }
         }
@@ -160,33 +184,33 @@ st.markdown(
         [data-theme="dark"] .stApp { background: #0f1117 !important; }
 
         [data-theme="dark"] [data-testid="stMetric"] {
-            background: #1e2130 !important;
-            border: 1px solid #2e3250 !important;
+            background: rgba(15, 23, 42, 0.84) !important;
+            border: 1px solid rgba(148, 163, 184, 0.22) !important;
         }
 
         [data-theme="dark"] .stButton > button,
         [data-theme="dark"] .stFormSubmitButton > button {
-            background: #3d5afe !important;
+            background: linear-gradient(135deg, #0f766e, #15803d) !important;
             color: #fff !important;
             border: none !important;
         }
 
         [data-theme="dark"] [data-testid="stForm"] {
-            background: #1e2130 !important;
-            border: 1px solid #2e3250 !important;
-            border-radius: 10px !important;
+            background: rgba(15, 23, 42, 0.82) !important;
+            border: 1px solid rgba(148, 163, 184, 0.2) !important;
+            border-radius: 8px !important;
             padding: 1rem !important;
         }
 
         [data-theme="dark"] section[data-testid="stSidebar"] {
-            background: #1a1d2e !important;
+            background: #0f172a !important;
         }
 
         /* ── Shared metric style ── */
         [data-testid="stMetric"] {
-            border-radius: 10px;
-            padding: 1rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            border-radius: 8px;
+            padding: 1.05rem 1.1rem;
+            box-shadow: 0 14px 30px rgba(15,23,42,0.08);
         }
 
         [data-testid="stMetricLabel"] p,
@@ -202,7 +226,18 @@ st.markdown(
             border-radius: 8px;
             font-weight: 700;
             font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", sans-serif;
-            transition: background 0.2s ease, transform 0.1s ease;
+            border: 0;
+            background: linear-gradient(135deg, #0f766e, #15803d);
+            color: #ffffff;
+            box-shadow: 0 12px 22px rgba(15, 118, 110, 0.22);
+            transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+        }
+
+        .stButton > button:hover,
+        .stFormSubmitButton > button:hover {
+            background: linear-gradient(135deg, #0d9488, #16a34a);
+            color: #ffffff;
+            box-shadow: 0 14px 26px rgba(15, 118, 110, 0.28);
         }
 
         .stButton > button:active,
@@ -214,6 +249,7 @@ st.markdown(
         div[data-testid="stDataFrame"] {
             border-radius: 8px;
             overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.22);
         }
 
         /* ── Sidebar font ── */
@@ -223,12 +259,121 @@ st.markdown(
 
         /* ── Layout ── */
         .block-container {
-            max-width: 1120px;
-            padding-top: 1.4rem;
-            padding-bottom: 2rem;
+            max-width: 1180px;
+            padding-top: 1.1rem;
+            padding-bottom: 2.4rem;
         }
 
         h1, h2, h3 { letter-spacing: 0; }
+        h1 { font-weight: 800; }
+        h2, h3 { font-weight: 700; }
+
+        div[data-testid="stVerticalBlock"] { gap: 1rem; }
+
+        .app-hero {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 8px;
+            padding: 1.35rem 1.45rem;
+            margin: 0.35rem 0 1rem;
+            background:
+                linear-gradient(135deg, rgba(15, 118, 110, 0.96), rgba(17, 24, 39, 0.94)),
+                radial-gradient(circle at 92% 10%, rgba(245, 158, 11, 0.35), transparent 18rem);
+            color: #ffffff;
+            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+        }
+
+        .app-hero h1 {
+            margin: 0.25rem 0 0.35rem;
+            color: #ffffff;
+            font-size: clamp(2rem, 3vw, 3.1rem);
+            line-height: 1.12;
+        }
+
+        .app-hero p, .app-hero span, .app-hero strong { color: rgba(255,255,255,0.9); }
+
+        .hero-topline {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .hero-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 2rem;
+            padding: 0.25rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 1.15rem;
+        }
+
+        .hero-stat {
+            min-height: 5.3rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.16);
+        }
+
+        .hero-stat span {
+            display: block;
+            font-size: 0.82rem;
+            opacity: 0.82;
+            margin-bottom: 0.25rem;
+        }
+
+        .hero-stat strong {
+            display: block;
+            font-size: 1.2rem;
+            line-height: 1.25;
+        }
+
+        .section-title {
+            margin: 1rem 0 0.15rem;
+        }
+
+        .section-title h2 {
+            margin: 0;
+            font-size: 1.35rem;
+        }
+
+        .section-title p {
+            margin: 0.2rem 0 0;
+            color: #64748b;
+        }
+
+        [data-testid="stForm"],
+        [data-testid="stExpander"] {
+            border-radius: 8px !important;
+            box-shadow: 0 12px 28px rgba(15,23,42,0.07);
+        }
+
+        [data-testid="stTextInput"] input,
+        [data-testid="stNumberInput"] input {
+            border-radius: 8px !important;
+            min-height: 2.7rem;
+        }
+
+        .stProgress > div {
+            height: 0.85rem;
+            border-radius: 999px;
+        }
+
+        .stProgress > div > div {
+            border-radius: 999px;
+            background: linear-gradient(90deg, #14b8a6, #f59e0b);
+        }
 
         /* ── Mobile ── */
         @media (max-width: 720px) {
@@ -244,6 +389,9 @@ st.markdown(
             h2, h3 { font-size: 1.2rem; }
 
             [data-testid="stMetric"] { padding: 0.85rem; }
+
+            .app-hero { padding: 1rem; }
+            .hero-stats { grid-template-columns: 1fr; }
 
             /* bigger tap targets on mobile */
             .stButton > button,
@@ -422,11 +570,54 @@ def format_taka(amount: int | float) -> str:
     return f"{int(amount):,} টাকা"
 
 
+def section_title(title: str, subtitle: str = "") -> None:
+    subtitle_html = f"<p>{subtitle}</p>" if subtitle else ""
+    st.markdown(
+        f"""
+        <div class="section-title">
+            <h2>{title}</h2>
+            {subtitle_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hero(name: str, total_records: int, total_spent: int, remaining_budget: int) -> None:
+    st.markdown(
+        f"""
+        <section class="app-hero">
+            <div class="hero-topline">
+                <span class="hero-pill">ব্যক্তিগত ড্যাশবোর্ড</span>
+                <span class="hero-pill">লগইন: {name}</span>
+            </div>
+            <h1>আমার স্মার্ট মানি ম্যানেজার</h1>
+            <p>দৈনন্দিন খরচ, বাজেট এবং সেভিংস এক জায়গায় পরিষ্কারভাবে দেখুন।</p>
+            <div class="hero-stats">
+                <div class="hero-stat">
+                    <span>মোট রেকর্ড</span>
+                    <strong>{total_records}টি</strong>
+                </div>
+                <div class="hero-stat">
+                    <span>এখন পর্যন্ত খরচ</span>
+                    <strong>{format_taka(total_spent)}</strong>
+                </div>
+                <div class="hero-stat">
+                    <span>বাকি বাজেট</span>
+                    <strong>{format_taka(remaining_budget)}</strong>
+                </div>
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def filter_expenses(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    st.subheader("ফিল্টার")
+    section_title("ফিল্টার", "খাত, টাকা ও তারিখ অনুযায়ী রিপোর্ট সাজিয়ে নিন।")
 
     category_options = sorted(df["Khath"].dropna().unique().tolist())
     amount_min = int(df["Amount"].min())
@@ -557,8 +748,10 @@ elif authentication_status:
     all_data = load_expenses()
     user_df = all_data[all_data["username"] == username].copy()
 
-    st.title("💰 আমার স্মার্ট মানি ম্যানেজার")
-    st.caption(f"লগইন করা ইউজার: {name}")
+    total_records = len(user_df)
+    all_total_spent = int(user_df["Amount"].sum()) if not user_df.empty else 0
+    all_remaining_budget = TOTAL_BUDGET - all_total_spent
+    render_hero(name, total_records, all_total_spent, all_remaining_budget)
 
     df = filter_expenses(user_df)
 
@@ -566,6 +759,7 @@ elif authentication_status:
     remaining_budget = TOTAL_BUDGET - total_spent
     used_percent = min(100, round((total_spent / TOTAL_BUDGET) * 100))
 
+    section_title("বাজেট সারাংশ", "ফিল্টার করা ডেটার ওপর ভিত্তি করে বর্তমান হিসাব।")
     metric_1, metric_2, metric_3 = st.columns(3)
     metric_1.metric("মোট বাজেট", format_taka(TOTAL_BUDGET))
     metric_2.metric("মোট খরচ", format_taka(total_spent), delta=f"-{format_taka(total_spent)}" if total_spent else None)
@@ -573,7 +767,7 @@ elif authentication_status:
 
     st.progress(used_percent / 100, text=f"বাজেটের {used_percent}% ব্যবহার হয়েছে")
 
-    st.subheader("নতুন খরচ যোগ করুন")
+    section_title("নতুন খরচ যোগ করুন", "খরচ লিখে সেভ করলে রিপোর্ট আপডেট হবে।")
     with st.form(key="expense_form", clear_on_submit=True):
         category = st.text_input(
             "কোথায় খরচ করেছেন?",
@@ -601,7 +795,7 @@ elif authentication_status:
     elif df.empty:
         st.info("এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি। ফিল্টার বদলে দেখুন।")
     else:
-        st.subheader("খরচের বিশ্লেষণ")
+        section_title("খরচের বিশ্লেষণ", "কোন খাতে কত টাকা যাচ্ছে তা দ্রুত বোঝার জন্য।")
         category_df = (
             df.groupby("Khath", as_index=False)["Amount"]
             .sum()
@@ -615,20 +809,34 @@ elif authentication_status:
         left_col, right_col = st.columns([1, 1])
 
         with left_col:
-            st.write("খরচের তালিকা")
+            st.markdown("**খরচের তালিকা**")
             st.dataframe(table_df, use_container_width=True, hide_index=True)
 
         with right_col:
-            st.write("খাত অনুযায়ী পাই চার্ট")
-            fig, ax = plt.subplots(figsize=(5, 5))
+            st.markdown("**খাত অনুযায়ী চার্ট**")
+            chart_colors = [
+                "#0f766e",
+                "#f59e0b",
+                "#2563eb",
+                "#db2777",
+                "#16a34a",
+                "#7c3aed",
+                "#ea580c",
+                "#0891b2",
+            ]
+            fig, ax = plt.subplots(figsize=(5.4, 5.4), facecolor="none")
             ax.pie(
                 category_df["Amount"],
                 labels=category_df["Khath"],
                 autopct="%1.1f%%",
                 startangle=90,
-                textprops={"fontsize": 10},
+                colors=chart_colors[: len(category_df)],
+                pctdistance=0.78,
+                wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 2},
+                textprops={"fontsize": 10, "fontfamily": "sans-serif"},
             )
             ax.axis("equal")
+            ax.set_facecolor("none")
             st.pyplot(fig, use_container_width=True)
             plt.close(fig)
 
@@ -645,6 +853,6 @@ elif authentication_status:
             )
             st.dataframe(full_df[["তারিখ", "খাত", "টাকা"]], use_container_width=True, hide_index=True)
 
-        st.subheader("স্মার্ট বাজেট ফোরকাস্ট")
+        section_title("স্মার্ট বাজেট ফোরকাস্ট", "আপনার বর্তমান খরচের প্যাটার্ন থেকে ছোট্ট পরামর্শ।")
         if st.button("ফোরকাস্ট ও পরামর্শ তৈরি করুন"):
             show_forecast(df, category_df, remaining_budget)
