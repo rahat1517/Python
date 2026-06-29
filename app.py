@@ -14,9 +14,9 @@ if not os.path.exists(FILE_NAME):
 
 
 st.set_page_config(page_title="স্মার্ট মানি ম্যানেজার", layout="centered",menu_items={
-    'Get Help': None',
+    'Get Help': None,
     'Report a bug': None,
-    'About' :None
+    'About': None
 })
 st.title("💰 আমার স্মার্ট মানি ম্যানেজার")
 st.write("সহজে খরচ ট্র্যাক করুন এবং হিসেব রাখুন।")
