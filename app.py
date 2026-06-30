@@ -1,4 +1,5 @@
 import time
+import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -6,6 +7,12 @@ import matplotlib.pyplot as plt
 import requests
 import streamlit as st
 import streamlit_authenticator as stauth
+import streamlit.components.v1 as components
+
+try:
+    import gspread
+except ImportError:
+    gspread = None
 
 REQUIRED_SECRET_KEYS = ["google_sheet_url", "google_form_url", "cookie_key"]
 LOCAL_EXPENSES_PATTERN = "expenses_*.csv"
@@ -537,6 +544,204 @@ def save_local_expense(username: str, category: str, amount: int) -> None:
     data.to_csv(path, index=False, encoding="utf-8")
 
 
+def get_user_expense_path(username: str) -> Path:
+    return Path(f"expenses_{username}.csv")
+
+
+def get_spreadsheet_id() -> str:
+    match = re.search(r"/spreadsheets/d/([^/]+)", GOOGLE_SHEET_URL)
+    return match.group(1) if match else ""
+
+
+def get_google_service_account_info() -> dict | None:
+    for key in ("google_service_account", "gcp_service_account"):
+        try:
+            info = st.secrets.get(key)
+        except Exception:
+            info = None
+
+        if info:
+            info = dict(info)
+            if "private_key" in info:
+                info["private_key"] = info["private_key"].replace("\\n", "\n")
+            return info
+
+    return None
+
+
+def get_google_worksheet():
+    if gspread is None:
+        return None, "Google Sheet এডিট করতে gspread package install করতে হবে।"
+
+    service_account_info = get_google_service_account_info()
+    if not service_account_info:
+        return None, "Google Sheet এডিট করতে secrets.toml-এ google_service_account সেট করুন।"
+
+    spreadsheet_id = get_spreadsheet_id()
+    if not spreadsheet_id:
+        return None, "google_sheet_url থেকে Spreadsheet ID পাওয়া যায়নি।"
+
+    try:
+        client = gspread.service_account_from_dict(service_account_info)
+        workbook = client.open_by_key(spreadsheet_id)
+        worksheet_name = st.secrets.get("google_sheet_worksheet", "")
+        worksheet = workbook.worksheet(worksheet_name) if worksheet_name else workbook.sheet1
+        return worksheet, ""
+    except Exception as exc:
+        return None, f"Google Sheet খুলতে সমস্যা হয়েছে: {exc}"
+
+
+def find_header(headers: list[str], candidates: list[str]) -> str | None:
+    normalized = {str(header).strip().lower(): header for header in headers}
+    for candidate in candidates:
+        header = normalized.get(candidate.lower())
+        if header is not None:
+            return header
+    return None
+
+
+def get_sheet_column_map(headers: list[str]) -> dict:
+    return {
+        "username": find_header(headers, ["username", "user", "name", "নাম", "ইউজার"]),
+        "date": find_header(headers, ["timestamp", "date", "তারিখ"]),
+        "category": find_header(headers, ["khath", "category", "খাত"]),
+        "amount": find_header(headers, ["amount", "টাকা"]),
+    }
+
+
+def load_google_sheet_editable_expenses(username: str) -> tuple[pd.DataFrame, str]:
+    worksheet, error = get_google_worksheet()
+    if error:
+        return pd.DataFrame(columns=["Source", "Row", "Date", "Category", "Amount"]), error
+
+    rows = worksheet.get_all_records()
+    headers = worksheet.row_values(1)
+    column_map = get_sheet_column_map(headers)
+    missing_columns = [column for column in ["username", "date", "category", "amount"] if not column_map[column]]
+    if missing_columns:
+        return (
+            pd.DataFrame(columns=["Source", "Row", "Date", "Category", "Amount"]),
+            f"Google Sheet header পাওয়া যায়নি: {', '.join(missing_columns)}",
+        )
+
+    editable_rows = []
+    for row_number, row in enumerate(rows, start=2):
+        row_username = str(row.get(column_map["username"], "")).strip()
+        if row_username != username:
+            continue
+
+        amount = pd.to_numeric(row.get(column_map["amount"], 0), errors="coerce")
+        editable_rows.append(
+            {
+                "Source": "Google Sheet",
+                "Row": row_number,
+                "Date": pd.to_datetime(row.get(column_map["date"], ""), errors="coerce").date(),
+                "Category": str(row.get(column_map["category"], "")).strip(),
+                "Amount": int(0 if pd.isna(amount) else amount),
+            }
+        )
+
+    return pd.DataFrame(editable_rows, columns=["Source", "Row", "Date", "Category", "Amount"]), ""
+
+
+def load_editable_expenses(username: str) -> pd.DataFrame:
+    path = get_user_expense_path(username)
+    google_df, _ = load_google_sheet_editable_expenses(username)
+
+    if not path.exists():
+        return google_df
+
+    data = normalize_expenses(pd.read_csv(path), username)
+    data = data.rename(columns={"Khath": "Category"})
+    data["Date"] = data["Date"].dt.date
+    data["Source"] = "লোকাল CSV"
+    data["Row"] = range(1, len(data) + 1)
+    local_df = data[["Source", "Row", "Date", "Category", "Amount"]]
+    return pd.concat([google_df, local_df], ignore_index=True)
+
+
+def save_editable_expenses(username: str, data: pd.DataFrame) -> tuple[bool, str]:
+    path = get_user_expense_path(username)
+    cleaned = data.copy()
+
+    for column in ["Date", "Category", "Amount"]:
+        if column not in cleaned.columns:
+            return False, f"কলাম পাওয়া যায়নি: {column}"
+
+    cleaned = cleaned[["Date", "Category", "Amount"]].copy()
+    cleaned["Category"] = cleaned["Category"].fillna("").astype(str).str.strip()
+    cleaned["Amount"] = pd.to_numeric(cleaned["Amount"], errors="coerce").fillna(0).astype(int)
+    cleaned["Date"] = pd.to_datetime(cleaned["Date"], errors="coerce")
+    cleaned = cleaned[(cleaned["Category"] != "") & (cleaned["Amount"] > 0)]
+
+    output = pd.DataFrame(
+        {
+            "username": username,
+            "Date": cleaned["Date"],
+            "Khath": cleaned["Category"],
+            "Amount": cleaned["Amount"],
+        }
+    )
+    output.to_csv(path, index=False, encoding="utf-8")
+    return True, "রেকর্ড সফলভাবে আপডেট হয়েছে।"
+
+
+def save_google_sheet_editable_expenses(data: pd.DataFrame) -> tuple[bool, str]:
+    worksheet, error = get_google_worksheet()
+    if error:
+        return False, error
+
+    headers = worksheet.row_values(1)
+    column_map = get_sheet_column_map(headers)
+    missing_columns = [column for column in ["date", "category", "amount"] if not column_map[column]]
+    if missing_columns:
+        return False, f"Google Sheet header পাওয়া যায়নি: {', '.join(missing_columns)}"
+
+    header_positions = {header: index + 1 for index, header in enumerate(headers)}
+    try:
+        for _, row in data.iterrows():
+            row_number = int(row["Row"])
+            worksheet.update_cell(row_number, header_positions[column_map["date"]], str(row["Date"]))
+            worksheet.update_cell(row_number, header_positions[column_map["category"]], str(row["Category"]).strip())
+            worksheet.update_cell(row_number, header_positions[column_map["amount"]], int(row["Amount"]))
+    except Exception as exc:
+        return False, f"Google Sheet update করতে সমস্যা হয়েছে: {exc}"
+
+    return True, "Google Sheet রেকর্ড সফলভাবে আপডেট হয়েছে।"
+
+
+def save_editable_expenses(username: str, data: pd.DataFrame) -> tuple[bool, str]:
+    cleaned = data.copy()
+    for column in ["Source", "Row", "Date", "Category", "Amount"]:
+        if column not in cleaned.columns:
+            return False, f"কলাম পাওয়া যায়নি: {column}"
+
+    cleaned["Category"] = cleaned["Category"].fillna("").astype(str).str.strip()
+    cleaned["Amount"] = pd.to_numeric(cleaned["Amount"], errors="coerce").fillna(0).astype(int)
+    cleaned["Date"] = pd.to_datetime(cleaned["Date"], errors="coerce").dt.date
+    cleaned = cleaned[(cleaned["Category"] != "") & (cleaned["Amount"] > 0)]
+
+    google_rows = cleaned[cleaned["Source"] == "Google Sheet"].copy()
+    local_rows = cleaned[cleaned["Source"] != "Google Sheet"].copy()
+
+    output = pd.DataFrame(
+        {
+            "username": username,
+            "Date": pd.to_datetime(local_rows["Date"], errors="coerce"),
+            "Khath": local_rows["Category"],
+            "Amount": local_rows["Amount"],
+        }
+    )
+    output.to_csv(get_user_expense_path(username), index=False, encoding="utf-8")
+
+    if not google_rows.empty:
+        success, message = save_google_sheet_editable_expenses(google_rows)
+        if not success:
+            return success, message
+
+    return True, "সব রেকর্ড সফলভাবে আপডেট হয়েছে।"
+
+
 def save_expense(username: str, category: str, amount: int) -> tuple[bool, str]:
     form_data = {
         "entry.410603098": username,
@@ -721,6 +926,246 @@ def show_forecast(df: pd.DataFrame, category_df: pd.DataFrame, remaining_budget:
         st.warning("আপনার বাজেট শেষের দিকে। জরুরি নয় এমন খরচ আপাতত কমিয়ে দিন।")
 
 
+def render_hamburger_menu_button() -> None:
+    components.html(
+        """
+        <script>
+            const parentDoc = window.parent.document;
+            const buttonId = "custom-sidebar-toggle";
+            let toggleButton = parentDoc.getElementById(buttonId);
+
+            if (!toggleButton) {
+                toggleButton = parentDoc.createElement("button");
+                toggleButton.id = buttonId;
+                toggleButton.type = "button";
+                toggleButton.setAttribute("aria-label", "মেনু খুলুন");
+                toggleButton.innerHTML = "<span></span><span></span><span></span>";
+                parentDoc.body.appendChild(toggleButton);
+            }
+
+            toggleButton.onclick = () => {
+                const streamlitToggle =
+                    parentDoc.querySelector('[data-testid="collapsedControl"] button') ||
+                    parentDoc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
+                    parentDoc.querySelector('button[aria-label="Open sidebar"]') ||
+                    parentDoc.querySelector('button[aria-label="Close sidebar"]') ||
+                    parentDoc.querySelector('button[data-testid="baseButton-headerNoPadding"]');
+
+                if (streamlitToggle) {
+                    streamlitToggle.click();
+                }
+            };
+
+            const styleId = "custom-sidebar-toggle-style";
+            if (!parentDoc.getElementById(styleId)) {
+                const style = parentDoc.createElement("style");
+                style.id = styleId;
+                style.textContent = `
+                    #custom-sidebar-toggle {
+                        position: fixed;
+                        top: 0.9rem;
+                        left: 0.9rem;
+                        z-index: 999999;
+                        width: 2.7rem;
+                        height: 2.7rem;
+                        display: inline-flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 0.28rem;
+                        border: 1px solid rgba(148, 163, 184, 0.28);
+                        border-radius: 8px;
+                        background: rgba(15, 118, 110, 0.96);
+                        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.2);
+                        cursor: pointer;
+                    }
+
+                    #custom-sidebar-toggle span {
+                        width: 1.25rem;
+                        height: 0.14rem;
+                        border-radius: 999px;
+                        background: #ffffff;
+                        display: block;
+                    }
+
+                    #custom-sidebar-toggle:hover {
+                        background: #0d9488;
+                    }
+
+                    @media (max-width: 720px) {
+                        #custom-sidebar-toggle {
+                            top: 0.7rem;
+                            left: 0.7rem;
+                        }
+                    }
+                `;
+                parentDoc.head.appendChild(style);
+            }
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def render_sidebar_navigation() -> str:
+    return st.sidebar.radio(
+        "মেনু",
+        [
+            "ব্যক্তিগত ড্যাশবোর্ড",
+            "বাজেট সারাংশ",
+            "খরচ বিশ্লেষণ",
+            "ফোরকাস্টিং",
+            "রেকর্ড এডিট",
+        ],
+        key="selected_dashboard_section",
+    )
+
+
+def render_add_expense_form(username: str) -> None:
+    section_title("নতুন খরচ যোগ করুন", "খরচ লিখে সেভ করলে রিপোর্ট আপডেট হবে।")
+    with st.form(key="expense_form", clear_on_submit=True):
+        category = st.text_input(
+            "কোথায় খরচ করেছেন?",
+            placeholder="যেমন: খাবার, রিকশা, বাজার",
+        )
+        amount = st.number_input("কত টাকা খরচ হয়েছে?", min_value=1, step=1)
+        submit_button = st.form_submit_button("সেভ করুন")
+
+    if submit_button:
+        category = category.strip()
+        if not category:
+            st.error("খরচের খাত লিখুন।")
+        else:
+            success, message = save_expense(username, category, int(amount))
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(message)
+
+
+def render_edit_records(username: str) -> None:
+    section_title("রেকর্ড এডিট", "ভুল ইনপুট হলে তারিখ, খাত বা টাকার পরিমাণ ঠিক করে নিন।")
+    st.caption("গুগল শিটের রেকর্ড এখানে সরাসরি এডিট করা যাবে না। লোকাল CSV রেকর্ড এডিট, যোগ বা মুছে ফেলা যাবে।")
+
+    editable_df = load_editable_expenses(username)
+    edited_df = st.data_editor(
+        editable_df,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "Date": st.column_config.DateColumn("তারিখ"),
+            "Category": st.column_config.TextColumn("খাত", required=True),
+            "Amount": st.column_config.NumberColumn("টাকা", min_value=1, step=1, required=True),
+        },
+        key="expense_edit_table",
+    )
+
+    if st.button("পরিবর্তন সেভ করুন", key="save_edited_expenses"):
+        success, message = save_editable_expenses(username, edited_df)
+        if success:
+            st.success(message)
+            st.rerun()
+        else:
+            st.error(message)
+
+
+def render_budget_summary(df: pd.DataFrame) -> None:
+    total_spent = int(df["Amount"].sum()) if not df.empty else 0
+    remaining_budget = TOTAL_BUDGET - total_spent
+    used_percent = min(100, round((total_spent / TOTAL_BUDGET) * 100))
+
+    section_title("বাজেট সারাংশ", "ফিল্টার করা ডেটার ওপর ভিত্তি করে বর্তমান হিসাব।")
+    metric_1, metric_2, metric_3 = st.columns(3)
+    metric_1.metric("মোট বাজেট", format_taka(TOTAL_BUDGET))
+    metric_2.metric("মোট খরচ", format_taka(total_spent), delta=f"-{format_taka(total_spent)}" if total_spent else None)
+    metric_3.metric("বাকি বাজেট", format_taka(remaining_budget))
+    st.progress(used_percent / 100, text=f"বাজেটের {used_percent}% ব্যবহার হয়েছে")
+
+
+def build_category_summary(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["Khath", "Amount"])
+    return (
+        df.groupby("Khath", as_index=False)["Amount"]
+        .sum()
+        .sort_values("Amount", ascending=False)
+    )
+
+
+def render_cost_analysis(df: pd.DataFrame) -> None:
+    if df.empty:
+        st.info("এই ফিল্টারে কোনো রেকর্ড পাওয়া যায়নি। ফিল্টার বদলে দেখুন।")
+        return
+
+    section_title("খরচের বিশ্লেষণ", "কোন খাতে কত টাকা যাচ্ছে তা দ্রুত বোঝার জন্য।")
+    category_df = build_category_summary(df)
+    table_df = category_df.rename(
+        columns={"Khath": "খাত", "Amount": "মোট খরচ"}
+    )
+
+    left_col, right_col = st.columns([1, 1])
+
+    with left_col:
+        st.markdown("**খরচের তালিকা**")
+        st.dataframe(table_df, use_container_width=True, hide_index=True)
+
+    with right_col:
+        st.markdown("**খাত অনুযায়ী চার্ট**")
+        chart_colors = [
+            "#0f766e",
+            "#f59e0b",
+            "#2563eb",
+            "#db2777",
+            "#16a34a",
+            "#7c3aed",
+            "#ea580c",
+            "#0891b2",
+        ]
+        fig, ax = plt.subplots(figsize=(5.4, 5.4), facecolor="none")
+        ax.pie(
+            category_df["Amount"],
+            labels=category_df["Khath"],
+            autopct="%1.1f%%",
+            startangle=90,
+            colors=chart_colors[: len(category_df)],
+            pctdistance=0.78,
+            wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 2},
+            textprops={"fontsize": 10, "fontfamily": "sans-serif"},
+        )
+        ax.axis("equal")
+        ax.set_facecolor("none")
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with st.expander("সব রেকর্ড দেখুন"):
+        full_df = df.copy()
+        full_df["Date"] = full_df["Date"].dt.strftime("%Y-%m-%d").fillna("তারিখ নেই")
+        full_df = full_df.rename(
+            columns={
+                "username": "ইউজার",
+                "Date": "তারিখ",
+                "Khath": "খাত",
+                "Amount": "টাকা",
+            }
+        )
+        st.dataframe(full_df[["তারিখ", "খাত", "টাকা"]], use_container_width=True, hide_index=True)
+
+
+def render_forecasting(df: pd.DataFrame) -> None:
+    if df.empty:
+        st.info("ফোরকাস্ট তৈরি করার জন্য খরচের রেকর্ড দরকার।")
+        return
+
+    total_spent = int(df["Amount"].sum())
+    remaining_budget = TOTAL_BUDGET - total_spent
+    section_title("স্মার্ট বাজেট ফোরকাস্ট", "আপনার বর্তমান খরচের প্যাটার্ন থেকে ছোট্ট পরামর্শ।")
+    if st.button("ফোরকাস্ট ও পরামর্শ তৈরি করুন"):
+        show_forecast(df, build_category_summary(df), remaining_budget)
+
+
 authenticator = stauth.Authenticate(
     build_credentials(),
     "money_manager_cookie",
@@ -736,9 +1181,49 @@ name = st.session_state.get("name")
 
 if authentication_status is False:
     st.error("ইউজারনেম বা পাসওয়ার্ড ভুল হয়েছে। আবার চেষ্টা করুন।")
-elif authentication_status is None:
-    st.warning("আপনার ইউজারনেম ও পাসওয়ার্ড দিয়ে লগইন করুন।")
+
 elif authentication_status:
+    render_hamburger_menu_button()
+    authenticator.logout("লগআউট", "sidebar")
+    st.sidebar.title(f"স্বাগতম, {name}!")
+    selected_section = render_sidebar_navigation()
+
+    all_data = load_expenses()
+    user_df = all_data[all_data["username"] == username].copy()
+
+    total_records = len(user_df)
+    all_total_spent = int(user_df["Amount"].sum()) if not user_df.empty else 0
+    all_remaining_budget = TOTAL_BUDGET - all_total_spent
+
+    if selected_section == "ব্যক্তিগত ড্যাশবোর্ড":
+        render_hero(name, total_records, all_total_spent, all_remaining_budget)
+        render_add_expense_form(username)
+        if user_df.empty:
+            st.info("এখনো কোনো খরচের রেকর্ড নেই। এই ড্যাশবোর্ড থেকে প্রথম খরচ যোগ করুন।")
+        else:
+            recent_df = user_df.sort_values("Date", ascending=False).head(8).copy()
+            recent_df["Date"] = recent_df["Date"].dt.strftime("%Y-%m-%d").fillna("তারিখ নেই")
+            recent_df = recent_df.rename(
+                columns={
+                    "Date": "তারিখ",
+                    "Khath": "খাত",
+                    "Amount": "টাকা",
+                }
+            )
+            section_title("সাম্প্রতিক রেকর্ড")
+            st.dataframe(recent_df[["তারিখ", "খাত", "টাকা"]], use_container_width=True, hide_index=True)
+    elif selected_section == "রেকর্ড এডিট":
+        render_edit_records(username)
+    else:
+        filtered_df = filter_expenses(user_df)
+        if selected_section == "বাজেট সারাংশ":
+            render_budget_summary(filtered_df)
+        elif selected_section == "খরচ বিশ্লেষণ":
+            render_cost_analysis(filtered_df)
+        elif selected_section == "ফোরকাস্টিং":
+            render_forecasting(filtered_df)
+
+    st.stop()
     authenticator.logout("লগআউট", "sidebar")
     st.sidebar.title(f"স্বাগতম, {name}!")
     st.sidebar.caption("আপনার ব্যক্তিগত খরচের হিসাব")
