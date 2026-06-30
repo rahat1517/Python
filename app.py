@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import requests
 import streamlit as st
 import streamlit_authenticator as stauth
+import streamlit.components.v1 as components
 
 
 REQUIRED_SECRET_KEYS = ["google_sheet_url", "google_form_url", "cookie_key"]
@@ -583,6 +584,88 @@ def section_title(title: str, subtitle: str = "") -> None:
     )
 
 
+def render_hamburger_menu_button() -> None:
+    components.html(
+        """
+        <script>
+            const parentDoc = window.parent.document;
+            const buttonId = "custom-sidebar-toggle";
+            let toggleButton = parentDoc.getElementById(buttonId);
+
+            if (!toggleButton) {
+                toggleButton = parentDoc.createElement("button");
+                toggleButton.id = buttonId;
+                toggleButton.type = "button";
+                toggleButton.setAttribute("aria-label", "Open menu");
+                toggleButton.innerHTML = "<span></span><span></span><span></span>";
+                parentDoc.body.appendChild(toggleButton);
+            }
+
+            toggleButton.onclick = () => {
+                const streamlitToggle =
+                    parentDoc.querySelector('[data-testid="collapsedControl"] button') ||
+                    parentDoc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
+                    parentDoc.querySelector('button[aria-label="Open sidebar"]') ||
+                    parentDoc.querySelector('button[aria-label="Close sidebar"]') ||
+                    parentDoc.querySelector('button[data-testid="baseButton-headerNoPadding"]');
+
+                if (streamlitToggle) {
+                    streamlitToggle.click();
+                }
+            };
+
+            const styleId = "custom-sidebar-toggle-style";
+            if (!parentDoc.getElementById(styleId)) {
+                const style = parentDoc.createElement("style");
+                style.id = styleId;
+                style.textContent = `
+                    #custom-sidebar-toggle {
+                        position: fixed;
+                        top: 0.9rem;
+                        left: 0.9rem;
+                        z-index: 999999;
+                        width: 2.7rem;
+                        height: 2.7rem;
+                        display: inline-flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 0.28rem;
+                        border: 1px solid rgba(148, 163, 184, 0.28);
+                        border-radius: 8px;
+                        background: rgba(15, 118, 110, 0.96);
+                        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.2);
+                        cursor: pointer;
+                    }
+
+                    #custom-sidebar-toggle span {
+                        width: 1.25rem;
+                        height: 0.14rem;
+                        border-radius: 999px;
+                        background: #ffffff;
+                        display: block;
+                    }
+
+                    #custom-sidebar-toggle:hover {
+                        background: #0d9488;
+                    }
+
+                    @media (max-width: 720px) {
+                        #custom-sidebar-toggle {
+                            top: 0.7rem;
+                            left: 0.7rem;
+                        }
+                    }
+                `;
+                parentDoc.head.appendChild(style);
+            }
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def render_hero(name: str, total_records: int, total_spent: int, remaining_budget: int) -> None:
     st.markdown(
         f"""
@@ -741,6 +824,7 @@ if authentication_status is False:
 elif authentication_status is None:
     st.warning("আপনার ইউজারনেম ও পাসওয়ার্ড দিয়ে লগইন করুন।")
 elif authentication_status:
+    render_hamburger_menu_button()
     authenticator.logout("লগআউট", "sidebar")
     st.sidebar.title(f"স্বাগতম, {name}!")
     st.sidebar.caption("আপনার ব্যক্তিগত খরচের হিসাব")
